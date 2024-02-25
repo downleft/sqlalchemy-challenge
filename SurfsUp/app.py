@@ -88,6 +88,33 @@ def stations():
     return jsonify(all_stations)
 
 #Retrieve 12 months of tops data for most-active station
+@app.route("/api/v1.0/tobs")
+def tobs():
+
+    # Create a session
+    session = Session(engine)
+
+    #Identify most-active station
+    sel = [Measurement.date, Measurement.tobs, Measurement.station]
+    #station_count = session.query([Measurement.station, func.count(Measurement.date)]).group_by(Measurement.station).all()
+    #station_count.sort(key = lambda a: a[1], reverse = True)
+
+    """Return last 12 months of temperature data"""
+    results = session.query(*sel).filter(func.strftime(Measurement.station) == "USC00519281").filter(func.strftime(Measurement.date) >= dt.date(2016, 8, 23)).all()
+
+    session.close()
+
+    # Create a dictionary from the row data and append to a list
+    high_data = []
+    for date, tobs, station in results:
+        high_data_dict = {}
+        high_data_dict["date"] = date
+        high_data_dict["tobs"] = tobs
+        high_data.append(high_data_dict)
+
+    return (
+        #print(f"Return last 12 months of temperature data<br/>"), 
+        jsonify(high_data))
 
 #Retrieve JSON list of min, avg, and max temp for a specified start
 
