@@ -1,5 +1,6 @@
 # Import the dependencies.
 import numpy as np
+import datetime as dt
 
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
@@ -26,15 +27,10 @@ Base.prepare(autoload_with=engine)
 Measurement = Base.classes.measurement
 Station = Base.classes.station
 
-# Create a session
-session = Session(engine)
-
 #################################################
 # Flask Setup
 #################################################
 app = Flask(__name__)
-
-
 
 #################################################
 # Flask Routes
@@ -44,12 +40,59 @@ def welcome():
     """List all available api routes."""
     return (
         f"Available Routes:<br/>"
-        f"/api/v1.0/precipitaion<br/>"
+        f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
         f"/api/v1.0/<start><br/>"
         f"/api/v1.0/<start>/<end>"
         )
+
+#Return 12 months of precipitation data
+@app.route("/api/v1.0/precipitation")
+def precipitation():
+
+    # Create a session
+    session = Session(engine)
+
+    """Return last 12 months of precipitation data"""
+    results = session.query(Measurement.date, Measurement.prcp).filter(func.strftime(Measurement.date) >= dt.date(2016, 8, 23)).all()
+
+    session.close()
+
+    # Create a dictionary from the row data and append to a list
+    year_data = []
+    for date, prcp in results:
+        year_data_dict = {}
+        year_data_dict["date"] = date
+        year_data_dict["prcp"] = prcp
+        year_data.append(year_data_dict)
+
+    return jsonify(year_data)
+
+#Return JSON list of stations
+@app.route("/api/v1.0/stations")
+def stations():
+
+    # Create a session
+    session = Session(engine)
+
+    """Return a list of all stations"""
+    # Query all stations
+    results = session.query(Station.station).all()
+
+    session.close()
+
+    # Convert list of tuples into normal list
+    all_stations = list(np.ravel(results))
+
+    return jsonify(all_stations)
+
+#Retrieve 12 months of tops data for most-active station
+
+#Retrieve JSON list of min, avg, and max temp for a specified start
+
+#Retrieve JSON list of min, avg, and max temp for a specified start and end
+
 
 
 
