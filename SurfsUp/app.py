@@ -96,8 +96,9 @@ def tobs():
 
     #Identify most-active station
     sel = [Measurement.date, Measurement.tobs, Measurement.station]
-    #station_count = session.query([Measurement.station, func.count(Measurement.date)]).group_by(Measurement.station).all()
+    #station_count = session.query(*sel).group_by(Measurement.station).all()
     #station_count.sort(key = lambda a: a[1], reverse = True)
+    #high_station = station_count[0][0]
 
     """Return last 12 months of temperature data"""
     results = session.query(*sel).filter(func.strftime(Measurement.station) == "USC00519281").filter(func.strftime(Measurement.date) >= dt.date(2016, 8, 23)).all()
@@ -112,9 +113,7 @@ def tobs():
         high_data_dict["tobs"] = tobs
         high_data.append(high_data_dict)
 
-    return (
-        #print(f"Return last 12 months of temperature data<br/>"), 
-        jsonify(high_data))
+    return (jsonify(high_data))
 
 #Retrieve JSON list of min, avg, and max temp for a specified start
 
