@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
 
 from flask import Flask, jsonify
+import pandas as pd
 
 #################################################
 # Database Setup
@@ -55,7 +56,7 @@ def precipitation():
     session = Session(engine)
 
     """Return last 12 months of precipitation data"""
-    results = session.query(Measurement.date, Measurement.prcp).filter(func.strftime(Measurement.date) >= dt.date(2016, 8, 23)).all()
+    results = session.query(Measurement.date, Measurement.prcp).filter((Measurement.date) >= dt.date(2016, 8, 23)).all()
 
     session.close()
 
@@ -96,12 +97,12 @@ def tobs():
 
     #Identify most-active station
     sel = [Measurement.date, Measurement.tobs, Measurement.station]
-    #station_count = session.query(*sel).group_by(Measurement.station).all()
-    #station_count.sort(key = lambda a: a[1], reverse = True)
-    #high_station = station_count[0][0]
+    station_count = session.query(Measurement.station, func.count(Measurement.date)).group_by(Measurement.station).all()
+    station_count.sort(key = lambda a: a[1], reverse = True)
+    high_station = station_count[0][0]
 
     """Return last 12 months of temperature data"""
-    results = session.query(*sel).filter(func.strftime(Measurement.station) == "USC00519281").filter(func.strftime(Measurement.date) >= dt.date(2016, 8, 23)).all()
+    results = session.query(*sel).filter(Measurement.station == high_station).filter((Measurement.date) >= dt.date(2016, 8, 23)).all()
 
     session.close()
 
@@ -116,9 +117,98 @@ def tobs():
     return (jsonify(high_data))
 
 #Retrieve JSON list of min, avg, and max temp for a specified start
+@app.route("/api/v1.0/<start>")
+def data_start(start):
+    """Return a JSON list of the minimum temperature, the average temperature,\
+         and the maximum temperature for a specified start or start-end range.s"""
+
+    #Convert start date to date-time object
+    canonicalized = start.split('-')
+    canonicalized = list(map(int, canonicalized))
+    try:
+        first_date = dt.date(canonicalized[0], canonicalized[1], canonicalized[2])
+
+        # Create a session
+        session = Session(engine)
+    
+        # Query based on start date
+        sel = [Measurement.date, Measurement.tobs]
+        results = session.query(*sel).filter((Measurement.date) >= first_date).all()
+
+        session.close()
+
+        #Create dataframe for min, avg, and max temps
+        temp_df = pd.DataFrame(results, columns = ["Date", "Temperature"])
+        temp_min = temp_df.groupby("Date").min()
+        temp_avg = temp_df.groupby("Date").mean()
+        temp_max = temp_df.groupby("Date").max()
+        temp_frame = pd.DataFrame(temp_df["Date"].unique(), columns = ["Date"])
+        temp_frame = pd.merge(temp_frame, temp_min, how = "inner", on = "Date").rename(columns = {"Temperature": "TMIN"})
+        temp_frame = pd.merge(temp_frame, temp_avg, how = "inner", on = "Date").rename(columns = {"Temperature": "TAVG"})
+        temp_frame = pd.merge(temp_frame, temp_max, how = "inner", on = "Date").rename(columns = {"Temperature": "TMAX"})
+    
+        #Create list that can jsonify
+        show_data = []
+        for index, row in temp_frame.iterrows():
+            data_dict = {}
+            data_dict["date"] = row["Date"]
+            data_dict["TMIN"] = row["TMIN"]
+            data_dict["TAVG"] = row["TAVG"]
+            data_dict["TMAX"] = row["TMAX"]
+            show_data.append(data_dict)
+
+        return jsonify(show_data)
+    except IndexError:
+        return jsonify({"error": f"Starting date of {start} not found.  Please type in a start date in the format of yyyy-mm-dd."}), 404
 
 #Retrieve JSON list of min, avg, and max temp for a specified start and end
+@app.route("/api/v1.0/<start>/<end>")
+def data_bounded(start, end):
+    """Return a JSON list of the minimum temperature, the average temperature,\
+         and the maximum temperature for a specified start or start-end range.s"""
 
+    #Convert start date to date-time object
+    canonicalized = start.split('-')
+    canonicalized = list(map(int, canonicalized))
+    end_canon = end.split('-')
+    end_canon = list(map(int, end_canon))
+
+    try:
+        first_date = dt.date(canonicalized[0], canonicalized[1], canonicalized[2])
+        end_date = dt.date(end_canon[0], end_canon[1], end_canon[2])
+
+        # Create a session
+        session = Session(engine)
+    
+        # Query based on start date
+        sel = [Measurement.date, Measurement.tobs]
+        results = session.query(*sel).filter((Measurement.date) >= first_date).filter((Measurement.date) <= end_date).all()
+
+        session.close()
+
+        #Create dataframe for min, avg, and max temps
+        temp_df = pd.DataFrame(results, columns = ["Date", "Temperature"])
+        temp_min = temp_df.groupby("Date").min()
+        temp_avg = temp_df.groupby("Date").mean()
+        temp_max = temp_df.groupby("Date").max()
+        temp_frame = pd.DataFrame(temp_df["Date"].unique(), columns = ["Date"])
+        temp_frame = pd.merge(temp_frame, temp_min, how = "inner", on = "Date").rename(columns = {"Temperature": "TMIN"})
+        temp_frame = pd.merge(temp_frame, temp_avg, how = "inner", on = "Date").rename(columns = {"Temperature": "TAVG"})
+        temp_frame = pd.merge(temp_frame, temp_max, how = "inner", on = "Date").rename(columns = {"Temperature": "TMAX"})
+    
+        #Create list that can jsonify
+        show_data = []
+        for index, row in temp_frame.iterrows():
+            data_dict = {}
+            data_dict["date"] = row["Date"]
+            data_dict["TMIN"] = row["TMIN"]
+            data_dict["TAVG"] = row["TAVG"]
+            data_dict["TMAX"] = row["TMAX"]
+            show_data.append(data_dict)
+
+        return jsonify(show_data)
+    except IndexError:
+        return jsonify({"error": f"Starting date of {start} or ending date of {end} not found.  Please type in a start and end date in the format of yyyy-mm-dd."}), 404
 
 
 
