@@ -28,6 +28,9 @@ Base.prepare(autoload_with=engine)
 Measurement = Base.classes.measurement
 Station = Base.classes.station
 
+# Create a session
+session = Session(engine)
+
 #################################################
 # Flask Setup
 #################################################
@@ -52,13 +55,8 @@ def welcome():
 @app.route("/api/v1.0/precipitation")
 def precipitation():
 
-    # Create a session
-    session = Session(engine)
-
     """Return last 12 months of precipitation data"""
     results = session.query(Measurement.date, Measurement.prcp).filter((Measurement.date) >= dt.date(2016, 8, 23)).all()
-
-    session.close()
 
     # Create a dictionary from the row data and append to a list
     year_data = []
@@ -74,14 +72,9 @@ def precipitation():
 @app.route("/api/v1.0/stations")
 def stations():
 
-    # Create a session
-    session = Session(engine)
-
     """Return a list of all stations"""
     # Query all stations
     results = session.query(Station.station).all()
-
-    session.close()
 
     # Convert list of tuples into normal list
     all_stations = list(np.ravel(results))
@@ -92,9 +85,6 @@ def stations():
 @app.route("/api/v1.0/tobs")
 def tobs():
 
-    # Create a session
-    session = Session(engine)
-
     #Identify most-active station
     sel = [Measurement.date, Measurement.tobs, Measurement.station]
     station_count = session.query(Measurement.station, func.count(Measurement.date)).group_by(Measurement.station).all()
@@ -103,8 +93,6 @@ def tobs():
 
     """Return last 12 months of temperature data"""
     results = session.query(*sel).filter(Measurement.station == high_station).filter((Measurement.date) >= dt.date(2016, 8, 23)).all()
-
-    session.close()
 
     # Create a dictionary from the row data and append to a list
     high_data = []
@@ -125,17 +113,14 @@ def data_start(start):
     #Convert start date to date-time object
     canonicalized = start.split('-')
     canonicalized = list(map(int, canonicalized))
+
+    #Attempt to use date
     try:
         first_date = dt.date(canonicalized[0], canonicalized[1], canonicalized[2])
 
-        # Create a session
-        session = Session(engine)
-    
         # Query based on start date
         sel = [Measurement.date, Measurement.tobs]
         results = session.query(*sel).filter((Measurement.date) >= first_date).all()
-
-        session.close()
 
         #Create dataframe for min, avg, and max temps
         temp_df = pd.DataFrame(results, columns = ["Date", "Temperature"])
@@ -158,12 +143,14 @@ def data_start(start):
             show_data.append(data_dict)
 
         return jsonify(show_data)
+    
+    #Output if date is not correctly formatted
     except IndexError:
         return jsonify({"error": f"Starting date of {start} not found.  Please type in a start date in the format of yyyy-mm-dd."}), 404
 
 #Retrieve JSON list of min, avg, and max temp for a specified start and end
 @app.route("/api/v1.0/<start>/<end>")
-def data_bounded(start, end):
+def data_end(start, end):
     """Return a JSON list of the minimum temperature, the average temperature,\
          and the maximum temperature for a specified start or start-end range.s"""
 
@@ -173,18 +160,14 @@ def data_bounded(start, end):
     end_canon = end.split('-')
     end_canon = list(map(int, end_canon))
 
+    #Attempt to use date
     try:
         first_date = dt.date(canonicalized[0], canonicalized[1], canonicalized[2])
         end_date = dt.date(end_canon[0], end_canon[1], end_canon[2])
-
-        # Create a session
-        session = Session(engine)
-    
+ 
         # Query based on start date
         sel = [Measurement.date, Measurement.tobs]
         results = session.query(*sel).filter((Measurement.date) >= first_date).filter((Measurement.date) <= end_date).all()
-
-        session.close()
 
         #Create dataframe for min, avg, and max temps
         temp_df = pd.DataFrame(results, columns = ["Date", "Temperature"])
@@ -207,10 +190,13 @@ def data_bounded(start, end):
             show_data.append(data_dict)
 
         return jsonify(show_data)
+    
+    #Output if date is not correctly formatted
     except IndexError:
         return jsonify({"error": f"Starting date of {start} or ending date of {end} not found.  Please type in a start and end date in the format of yyyy-mm-dd."}), 404
 
-
+#Close out the session
+session.close()
 
 if __name__ == '__main__':
     app.run(debug=True)
